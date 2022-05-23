@@ -1,3 +1,4 @@
+from fileinput import close
 from sqlite3 import Timestamp
 from typing_extensions import Self
 from dotenv import load_dotenv
@@ -15,7 +16,6 @@ from binance.websocket.futures.websocket_client import FuturesWebsocketClient as
 from binance.lib.utils import config_logging
 
 
-
 config_logging(logging, logging.DEBUG)
 load_dotenv()
 api_key = os.getenv("API_KEY")
@@ -24,6 +24,7 @@ headers = {
     'X-MBX-APIKEY': api_key
 }
 
+print(api_key)
 clientFutures = Futures(key=api_key, secret=secret_key)
 
 
@@ -33,7 +34,8 @@ def isBulllishEngulfing():
         "BTCUSDT", "1m", limit=2, contractType="perpetual"
     )
 
-    closed_candels = [{"o": first_candle_open[0][1], "c": first_candle_open[0][4]}]
+    closed_candels = [{"o": first_candle_open[0]
+                       [1], "c": first_candle_open[0][4], "color": "unknwown"}]
 
     def message_handler(message):
         kline = message.get("k")
@@ -50,6 +52,8 @@ def isBulllishEngulfing():
                     and closed_candels[len(closed_candels) - 2]["color"] == "red"
                 ):
                     print("its bullish!")
+                    print(closed_candels[len(closed_candels) - 2]['o'],
+                          closed_candels[len(closed_candels)-1]['c'])
                     bullis_candle_stamps.append(kline["t"])
                 print(bullis_candle_stamps)
 
@@ -62,6 +66,9 @@ def isBulllishEngulfing():
         interval="1m",
         callback=message_handler,
     )
+    """time.sleep(2)
+
+    logging.debug("closing ws connection")"""
 
 
 def marketBuy(quantity):
@@ -81,7 +88,7 @@ def marketBuy(quantity):
         )
 
 
-def limitSell(quantity,price):
+def limitSell(quantity, price):
     try:
         response = clientFutures.new_order(
             symbol="BTCUSDT",
@@ -99,21 +106,43 @@ def limitSell(quantity,price):
             )
         )
 
-def get_open_orders():
+
+def stop_market():
     try:
-        response = clientFutures.get_orders(symbol = "BTCUSDT",recvWindow=2000)
+        response = clientFutures.new_order(
+            symbol="BTCUSDT",
+            side="SELL",
+            type="STOP_MARKET",
+            quantity=0.001,
+            timeInForce="GTC",
+            stopPrice=29900
+        )
         logging.info(response)
     except ClientError as error:
-            logging.error(
-        "Found error. status: {}, error code: {}, error message: {}".format(
-            error.status_code, error.error_code, error.error_message
+        logging.error(
+            "Found error. status: {}, error code: {}, error message: {}".format(
+                error.status_code, error.error_code, error.error_message
+            )
         )
-    )
+
+
+def get_open_orders():
+    try:
+        response = clientFutures.get_orders(symbol="BTCUSDT", recvWindow=2000)
+        logging.info(response)
+    except ClientError as error:
+        logging.error(
+            "Found error. status: {}, error code: {}, error message: {}".format(
+                error.status_code, error.error_code, error.error_message
+            )
+        )
+
 
 def _signature(params):
-      params_query_string = urlencode(params)
-      return hmac.new(
-        secret_key.encode("utf-8"), params_query_string.encode("utf-8"), hashlib.sha256
+    params_query_string = urlencode(params)
+    return hmac.new(
+        secret_key.encode(
+            "utf-8"), params_query_string.encode("utf-8"), hashlib.sha256
     ).hexdigest()
 
 
@@ -132,29 +161,31 @@ def cancell_order(id):
     timestamp = int(time.time() * 1000)
     try:
         params = {
-        "symbol": "BTCUSDT",
-        "orderId": id,
-        'timestamp': timestamp
-    }
+            "symbol": "BTCUSDT",
+            "orderId": id,
+            'timestamp': timestamp
+        }
         query_string = urlencode(params)
-        params['signature'] = hmac.new(secret_key.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
+        params['signature'] = hmac.new(secret_key.encode(
+            'utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
         url = urljoin(BASE_URL, PATH)
         r = requests.delete(url, headers=headers, params=params)
         logging.info(r.json())
     except ClientError as error:
-            logging.error(
-        "Found error. status: {}, error code: {}, error message: {}".format(
-            error.status_code, error.error_code, error.error_message
+        logging.error(
+            "Found error. status: {}, error code: {}, error message: {}".format(
+                error.status_code, error.error_code, error.error_message
+            )
+
         )
-        
-    )
-    
+
 
 # isBulllishEngulfing()
 ## por ej marketBuy(0.001) el parametro es la cantidad a comprar ##
-#marketBuy()
+# marketBuy()
 ## por ej limitSell(0.001,30000) el parametro es la cantidad a comprar,y precio limit ##
-#limitSell()
-## para ver las ordenes y buscar un id si queres cancelarla
-#get_open_orders()
-#cancell_order(id)
+#limitSell(0.001, 30200)
+# para ver las ordenes y buscar un id si queres cancelarla
+# get_open_orders()
+# cancell_order(id)
+# stop_market()
