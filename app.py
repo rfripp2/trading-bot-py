@@ -138,24 +138,7 @@ def get_open_orders():
         )
 
 
-def _signature(params):
-    params_query_string = urlencode(params)
-    return hmac.new(
-        secret_key.encode(
-            "utf-8"), params_query_string.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
-
-
 def cancell_order(id):
-    """ try:
-        response = clientFutures.cancel_order(symbol = "BTCUSDT", clientOrderId='WPdNmZJztNCaTo37eooh1n', recvWindow=2000)
-        logging.info(response)
-    except ClientError as error:
-        logging.error(
-        "Found error. status: {}, error code: {}, error message: {}".format(
-            error.status_code, error.error_code, error.error_message
-        )
-    ) """
     PATH = '/fapi/v1/order'
     BASE_URL = 'https://fapi.binance.com'
     timestamp = int(time.time() * 1000)
