@@ -107,15 +107,15 @@ def limitSell(quantity, price):
         )
 
 
-def stop_market():
+def stop_market(quantity, stopPrice):
     try:
         response = clientFutures.new_order(
             symbol="BTCUSDT",
             side="SELL",
             type="STOP_MARKET",
-            quantity=0.001,
+            quantity=quantity,
             timeInForce="GTC",
-            stopPrice=29900
+            stopPrice=stopPrice
         )
         logging.info(response)
     except ClientError as error:
@@ -188,4 +188,4 @@ def cancell_order(id):
 # para ver las ordenes y buscar un id si queres cancelarla
 # get_open_orders()
 # cancell_order(id)
-# stop_market()
+# stop_market(0.001,29800)
