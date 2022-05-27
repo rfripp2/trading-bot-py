@@ -1,3 +1,8 @@
+import numpy as np
+import ta
+import pandas_datareader as pdr
+import datetime as dt
+import pandas as pd
 from fileinput import close
 from sqlite3 import Timestamp
 from tracemalloc import stop
@@ -30,33 +35,41 @@ position_running = False
 
 
 def is_bulllishengulfing_listener(quantity):
+    config = {
+        "position_running": False
+    }
     bullis_candle_stamps = []
-    first_candle_open = clientFutures.klines(
+    first_two_candels = clientFutures.klines(
         "BTCUSDT", "1m", limit=2, contractType="perpetual"
     )
 
-    order_pairs = []
-    closed_candels = [{"o": first_candle_open[0]
-                       [1], "c": first_candle_open[0][4], "color": "unknwown"}]
+    order_pair = {
+    }
+    closed_candels = [{"o": first_two_candels[0]
+                       [1], "c": first_two_candels[0][4], "color": "unknwown"}]
 
     def message_handler(message):
-        if (len(order_pairs) > 0):
-            first_pair = order_pairs[0]
+        if (bool(order_pair)):
             if_filled_cancell_other(
-                first_pair['limit_sell_order_id'], first_pair['stop_market_order_id'])
+                order_pair['limit_sell_order_id'], order_pair['stop_market_order_id'])
         kline = message.get("k")
         if kline != None:
             if kline["x"]:
+                print("KLINE:", kline)
                 if kline["c"] > closed_candels[len(closed_candels) - 1]["c"]:
                     kline["color"] = "green"
                 else:
                     kline["color"] = "red"
                 closed_candels.append(kline)
+                last_candle = closed_candels[-1]
+                penultimate_candle = closed_candels[-2]
+                print("last candle close:",
+                      last_candle['c'], "sma:", get_sma(5))
                 if (
-                    closed_candels[len(closed_candels) - 1]["c"]
-                    > closed_candels[len(closed_candels) - 2]["o"]
-                    and closed_candels[len(closed_candels) - 2]["color"] == "red"
-                    and position_running == False
+                    last_candle["c"] > penultimate_candle["o"]
+                    and penultimate_candle['color'] == "red"
+                    and config['position_running'] == False
+                    and last_candle['c'] > get_sma(5)
                 ):
                     print("its bullish!")
                     bullis_candle_stamps.append(kline["t"])
@@ -74,10 +87,12 @@ def is_bulllishengulfing_listener(quantity):
                     all_orders = get_all_orders()
                     stop_market_order_id = all_orders[len(
                         all_orders)-1]['orderId']
-                    order_pairs.append({"limit_sell_order_id": limit_sell_order_id,
-                                        "stop_market_order_id": stop_market_order_id})
-                    position_running = True
-                print("order pairs", order_pairs)
+                    order_pair["limit_sell_order_id"] = limit_sell_order_id
+                    order_pair["stop_market_order_id"] = stop_market_order_id
+                    config['position_running'] = True
+                if (bool(order_pair)):
+                    print(
+                        "order pairs", order_pair["limit_sell_order_id"], order_pair["stop_market_order_id"])
 
     my_client = Client()
     my_client.start()
@@ -95,7 +110,7 @@ def is_bulllishengulfing_listener(quantity):
 
 def marketBuy(quantity):
     try:
-        response = clientFutures.new_order(
+        clientFutures.new_order(
             symbol="BTCUSDT",
             side="BUY",
             type="MARKET",
@@ -163,9 +178,9 @@ def get_all_orders():
 
 def get_open_order(id):
     try:
-        response = clientFutures.get_open_orders(
+        clientFutures.get_open_orders(
             symbol="BTCUSDT", orderId=id, recvWindow=2000)
-        logging.info(response)
+        # logging.info(response)
 
     except ClientError as error:
         logging.error(
@@ -231,16 +246,55 @@ def if_filled_cancell_other(sell_limit_id, sell_stop_market_id):
         cancell_order(sell_limit_id)
 
 
-is_bulllishengulfing_listener(0.001)
+def get_sma(window):
+    candles = clientFutures.klines(
+        "BTCUSDT", "1m", limit=50, contractType="perpetual"
+    )
+    pandas_array = np.array(candles)
+    df = pd.DataFrame(pandas_array, columns=['Open Time',
+                                             'Open',
+                                             'High',
+                                             'Low',
+                                             'Close',
+                                             'Volume',
+                                             'Close time',
+                                             'Quote asset volume',
+                                             'Number of trades',
+                                             'Taker buy base asset volume',
+                                             'Taker buy quote asset volume',
+                                             'Ignore'])
+    df[f"SMA_{window}"] = df['Close'].rolling(window=int(window)).mean()
+    last_sma = df.iloc[-1][f"SMA_{window}"]
+    print(str(last_sma))
+    return str(last_sma)
+
+
+def atr():
+    candles = clientFutures.klines(
+        "BTCUSDT", "1m", limit=50, contractType="perpetual"
+    )
+    df = pd.DataFrame(candles)
+    df['atr'] = ta.add_volatility_ta(
+        df[2],
+        df[3],
+        df[4],
+        window=2,
+        fillna=False
+    ).average_true_range()
+    print("DF", df)
+
+
+# is_bulllishengulfing_listener(0.001)
 ## por ej marketBuy(0.001) el parametro es la cantidad a comprar ##
 # marketBuy()
 ## por ej limitSell(0.001,30000) el parametro es la cantidad a comprar,y precio limit ##
 # limitSell(0.001, 30200)
 # para ver las ordenes y buscar un id si queres cancelarla
 # get_all_orders()
-# cancell_order(55200479125)
-# stop_market(0.001,29800)
+# cancell_order(55650378164)
+# stop_market(0.001, 28800)
 # get_limit_sell_price_from_price(80, 50)
 # get_open_order(55200479125)
-# get_order(None)
+# get_order(55630407220)
 # get_stop_market_price_from_price(100, 10)
+atr()
