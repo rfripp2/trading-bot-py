@@ -1,21 +1,12 @@
-import time
-import os
 from binance.error import ClientError
 import logging
-from urllib.parse import urlencode, urljoin
-from more_itertools import quantify
-import requests
-import hmac
-import hashlib
 import pandas as pd
-import numpy as np
 import talib
-from binance.lib.utils import config_logging
 
 
-def market_buy(quantity, client):
+def market_buy(quantity, bot):
     try:
-        client.new_order(
+        bot.clientFutures.new_order(
             symbol="BTCUSDT",
             side="BUY",
             type="MARKET",
@@ -30,9 +21,9 @@ def market_buy(quantity, client):
         )
 
 
-def limit_sell(price, quantity, client):
+def limit_sell(price, quantity, bot):
     try:
-        response = client.new_order(
+        response = bot.clientFutures.new_order(
             symbol="BTCUSDT",
             side="SELL",
             type="LIMIT",
@@ -41,6 +32,8 @@ def limit_sell(price, quantity, client):
             quantity=quantity,
         )
         logging.info(response)
+        bot.order_pair["limit_sell_order_id"] = response["orderId"]
+
     except ClientError as error:
         logging.error(
             "Found error. status: {}, error code: {}, error message: {}".format(
@@ -49,9 +42,9 @@ def limit_sell(price, quantity, client):
         )
 
 
-def stop_market(stopPrice, quantity, client):
+def stop_market(stopPrice, quantity, bot):
     try:
-        response = client.new_order(
+        response = bot.clientFutures.new_order(
             symbol="BTCUSDT",
             side="SELL",
             type="STOP_MARKET",
@@ -59,6 +52,7 @@ def stop_market(stopPrice, quantity, client):
             timeInForce="GTC",
             stopPrice=stopPrice,
         )
+        bot.order_pair["stop_sell_id"] = response["orderId"]
         logging.info(response)
     except ClientError as error:
         logging.error(
@@ -105,21 +99,27 @@ def get_order(id, client):
         return False
 
 
-def cancell_order(id):
-    PATH = "/fapi/v1/order"
-    BASE_URL = "https://fapi.binance.com"
-    timestamp = int(time.time() * 1000)
-    secret_key = os.getenv("SECRET_KEY")
-    api_key = os.getenv("API_KEY")
-    headers = {"X-MBX-APIKEY": api_key}
+def cancel_order(bot, id):
     try:
-        params = {"symbol": "BTCUSDT", "orderId": id, "timestamp": timestamp}
-        query_string = urlencode(params)
-        params["signature"] = hmac.new(
-            secret_key.encode("utf-8"), query_string.encode("utf-8"), hashlib.sha256
-        ).hexdigest()
-        url = urljoin(BASE_URL, PATH)
-        r = requests.delete(url, headers=headers, params=params)
+        response = bot.clientFutures.cancel_order(
+            symbol="BTCUSDT", orderId=id, recvWindow=2000
+        )
+        logging.info(response)
+    except ClientError as error:
+        logging.error(
+            "Found error. status: {}, error code: {}, error message: {}".format(
+                error.status_code, error.error_code, error.error_message
+            )
+        )
+
+
+def query_order(bot, id):
+    try:
+        response = bot.clientFutures.query_order(
+            symbol="BTCUSDT", orderId=id, recvWindow=2000
+        )
+        logging.info(response)
+        return response
     except ClientError as error:
         logging.error(
             "Found error. status: {}, error code: {}, error message: {}".format(
@@ -136,49 +136,6 @@ def get_limit_sell_price_from_price(price, percentage):
 def get_stop_market_price_from_price(price, percentage):
     stop_sell_market_price = float(price) - (percentage * float(price) / 100)
     return int(stop_sell_market_price)
-
-
-def if_filled_cancell_other(sell_limit_id, sell_stop_market_id, client, self):
-
-    sell_limit_order = get_order(sell_limit_id, client)
-    sell_stop_market_order = get_order(sell_stop_market_id, client)
-
-    if sell_limit_order["status"] == "FILLED":
-        cancell_order(sell_stop_market_id)
-        self.config["position_running"] = False
-        self.order_pair = {}
-
-    if sell_stop_market_order["status"] == "FILLED":
-        cancell_order(sell_limit_id)
-        self.config["position_running"] = False
-        self.order_pair = {}
-
-
-def get_sma(window, client, timeframe):
-    candles = client.klines(
-        "BTCUSDT", timeframe, limit=window, contractType="perpetual"
-    )
-    pandas_array = np.array(candles)
-    df = pd.DataFrame(
-        pandas_array,
-        columns=[
-            "Open Time",
-            "Open",
-            "High",
-            "Low",
-            "Close",
-            "Volume",
-            "Close time",
-            "Quote asset volume",
-            "Number of trades",
-            "Taker buy base asset volume",
-            "Taker buy quote asset volume",
-            "Ignore",
-        ],
-    )
-    df[f"SMA_{window}"] = df["Close"].rolling(window=int(window)).mean()
-    last_sma = df.iloc[-1][f"SMA_{window}"]
-    return last_sma
 
 
 def atr(client, timeframe):
