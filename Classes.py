@@ -1,10 +1,8 @@
-from more_itertools import last
+
 import pandas as pd
 import numpy as np
 from binance.websocket.futures.websocket_client import FuturesWebsocketClient as Client
 from binance.futures import Futures
-from dotenv import load_dotenv
-import os
 from binance.futures import Futures
 from binance_orders import *
 
@@ -64,21 +62,24 @@ class Bot:
                     print("AMMOUNT TO BUY:", ammount_to_buy)
                     market_buy(ammount_to_buy, self.clientFutures)
                     sell_stop_market_price = round(
-                        float(kline["l"]) - atr(self.clientFutures, self.timeframe), 2
+                        float(kline["l"]) -
+                        atr(self.clientFutures, self.timeframe), 2
                     )
                     stop_market(
                         sell_stop_market_price, ammount_to_buy, self.clientFutures
                     )
 
                     limit_sell_price = round(
-                        float(kline["c"]) - sell_stop_market_price + float(kline["c"]),
+                        float(kline["c"]) -
+                        sell_stop_market_price + float(kline["c"]),
                         1,
                     )
 
-                    limit_sell(limit_sell_price, ammount_to_buy, self.clientFutures)
+                    limit_sell(limit_sell_price, ammount_to_buy,
+                               self.clientFutures)
                     all_orders = get_all_orders(self.clientFutures)
-                    limit_sell_order_id = all_orders[len(all_orders) - 2]["orderId"]
-                    stop_market_order_id = all_orders[len(all_orders) - 1]["orderId"]
+                    limit_sell_order_id = all_orders[1]["orderId"]
+                    stop_market_order_id = all_orders[0]["orderId"]
                     self.order_pair["limit_sell_order_id"] = limit_sell_order_id
                     self.order_pair["stop_market_order_id"] = stop_market_order_id
                     self.config["position_running"] = True
