@@ -1,7 +1,7 @@
 from binance.error import ClientError
 import logging
 import pandas as pd
-import talib
+#import talib
 
 
 def market_buy(quantity, bot):
@@ -31,6 +31,7 @@ def limit_sell(price, quantity, bot):
             price=price,
             quantity=quantity,
         )
+        print("RESPONSE", response)
         logging.info(response)
         bot.order_pair["limit_sell_order_id"] = response["orderId"]
 
@@ -64,7 +65,8 @@ def stop_market(stopPrice, quantity, bot):
 
 def get_all_orders(client):
     try:
-        response = client.get_all_orders(symbol="BTCUSDT", limit=2, recvWindow=2000)
+        response = client.get_all_orders(
+            symbol="BTCUSDT", limit=2, recvWindow=2000)
         return response
     except ClientError as error:
         logging.error(
@@ -138,8 +140,10 @@ def get_stop_market_price_from_price(price, percentage):
     return int(stop_sell_market_price)
 
 
-def atr(client, timeframe):
-    candles = client.klines("BTCUSDT", timeframe, limit=15, contractType="perpetual")
+"""def atr(client, timeframe):
+    candles = client.klines("BTCUSDT", timeframe,
+                            limit=15, contractType="perpetual")
     df = pd.DataFrame(candles)
     df["atr"] = talib.ATR(df[2], df[3], df[4], timeperiod=14)
     return float(df.iloc[-1]["atr"])
+"""

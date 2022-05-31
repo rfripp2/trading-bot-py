@@ -3,6 +3,7 @@ import numpy as np
 from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
 from binance.um_futures import UMFutures
 from binance_orders import *
+import time
 
 
 class Bot:
@@ -20,11 +21,6 @@ class Bot:
         kline = message.get("k")
         if kline != None:
             if kline["x"]:
-                if bool(self.order_pair):
-                    self.if_filled_cancel_other(
-                        self.order_pair["limit_sell_order_id"],
-                        self.order_pair["stop_sell_id"],
-                    )
                 print("KLINE:", kline)
                 if float(kline["c"]) > float(self.closed_candels[-1]["c"]):
                     kline["color"] = "green"
@@ -38,21 +34,22 @@ class Bot:
                     float(last_candle["c"]) > float(penultimate_candle["o"])
                     and penultimate_candle["color"] == "red"
                     and self.config["position_running"] == False
-                    and float(last_candle["c"]) > float(self.get_sma(self.sma))
+                    # and float(last_candle["c"]) > float(self.get_sma(self.sma))
                 ):
                     print("its bullish!")
                     ammount_to_buy = round(self.balance / float(kline["c"]), 3)
                     market_buy(ammount_to_buy, self)
                     sell_stop_market_price = round(
-                        float(kline["l"]) - atr(self.clientFutures, self.timeframe), 2
+                        float(kline["l"]) -
+                        35, 2
                     )
                     stop_market(sell_stop_market_price, ammount_to_buy, self)
 
                     limit_sell_price = round(
-                        float(kline["c"]) - sell_stop_market_price + float(kline["c"]),
+                        float(kline["c"]) -
+                        sell_stop_market_price + float(kline["c"]),
                         1,
                     )
-
                     limit_sell(limit_sell_price, ammount_to_buy, self)
                     self.config["position_running"] = True
 
@@ -67,6 +64,34 @@ class Bot:
             interval=self.timeframe,
             callback=self.bullish_engulfing_handler,
         )
+
+    def stream_account_trades(self):
+        client = self.clientFutures
+        response = client.new_listen_key()
+        ws_client = UMFuturesWebsocketClient()
+        ws_client.start()
+        ws_client.user_data(
+            listen_key=response["listenKey"],
+            id=1,
+            callback=self.account_message_handler,
+        )
+
+    def account_message_handler(self, message):
+        message = message.get("o")
+        print("MESSAGE", message)
+        if message and bool(self.order_pair):
+            if "i" in message and message['i'] == self.order_pair["stop_sell_id"]:
+                if message['X'] == "FILLED":
+                    cancel_order(self, self.order_pair["limit_sell_order_id"])
+                    self.order_pair = {}
+                    self.config['position_running'] = False
+                    return
+            if "i" in message and message['i'] == self.order_pair["limit_sell_order_id"]:
+                if message['X'] == "FILLED":
+                    cancel_order(self, self.order_pair["stop_sell_id"])
+                    self.order_pair = {}
+                    self.config['position_running'] = False
+                    return
 
     def get_first_candels(self):
         first_candels = self.clientFutures.klines(
