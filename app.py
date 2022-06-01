@@ -1,7 +1,9 @@
+from msilib.schema import Error
 from Classes import Bot
 from dotenv import load_dotenv
 import os
-from binance_orders import limit_sell
+from binance_orders import *
+from logger import logger
 load_dotenv()
 api_key = os.getenv("API_KEY")
 secret_key = os.getenv("SECRET_KEY")
@@ -15,9 +17,9 @@ if __name__ == '__main__':
     try:
         bot.run_bullish_engulfing()
         bot.stream_account_trades()
-    except:
+        logger.info("Bot and stream orders running")
+
+    except Error:
         bot.run_bullish_engulfing()
         bot.stream_account_trades()
-
-
-#limit_sell(32000, 0.001, bot)
+        logger.error("CRITICAL ERROR:", Error)
