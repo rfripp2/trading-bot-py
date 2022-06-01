@@ -10,7 +10,7 @@ secret_key = os.getenv("SECRET_KEY")
 
 
 bot = Bot(api_key=api_key, secret_key=secret_key,
-          balance=75, timeframe="1m", sma=10)
+          balance=40, timeframe="1m", sma=10)
 
 
 if __name__ == '__main__':

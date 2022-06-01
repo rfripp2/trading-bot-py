@@ -31,7 +31,7 @@ def limit_sell(price, quantity, bot):
             price=price,
             quantity=quantity,
         )
-        logger.info(response)
+        logger.info("response from limit sell", response)
         bot.order_pair["limit_sell_order_id"] = response["orderId"]
 
     except ClientError as error:
@@ -52,8 +52,9 @@ def stop_market(stopPrice, quantity, bot):
             timeInForce="GTC",
             stopPrice=stopPrice,
         )
+
         bot.order_pair["stop_sell_id"] = response["orderId"]
-        logger.info(response)
+        logger.info("response from stop market", response)
     except ClientError as error:
         logger.error(
             "Found error. status: {}, error code: {}, error message: {}".format(
@@ -109,6 +110,3 @@ def atr(client, timeframe):
     df = pd.DataFrame(candles)
     df["atr"] = talib.ATR(df[2], df[3], df[4], timeperiod=14)
     return float(df.iloc[-1]["atr"])
-
-
-# Testing our Logger

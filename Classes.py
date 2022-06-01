@@ -1,10 +1,12 @@
 from msilib.schema import Error
+from xmlrpc.client import Server
 import pandas as pd
 import numpy as np
 from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
 from binance.um_futures import UMFutures
 from binance_orders import *
 from logger import logger
+from binance.error import ClientError, ServerError
 
 
 class Bot:
@@ -22,8 +24,6 @@ class Bot:
             kline = message.get("k")
             if kline != None:
                 if kline["x"]:
-
-                    logger.info(kline)
                     if float(kline["c"]) > float(self.closed_candels[-1]["c"]):
                         kline["color"] = "green"
                     else:
@@ -57,6 +57,8 @@ class Bot:
                         )
                         limit_sell(limit_sell_price, ammount_to_buy, self)
                         self.config["position_running"] = True
+                    logger.info(kline)
+                    logger.info(self.config['position_running'])
         except Exception as e:
             logger.error(e, "Error during bullisn engulfing handler")
 
@@ -77,7 +79,6 @@ class Bot:
 
     def stream_account_trades(self):
         try:
-
             client = self.clientFutures
             response = client.new_listen_key()
             ws_client = UMFuturesWebsocketClient()
@@ -92,23 +93,27 @@ class Bot:
 
     def account_message_handler(self, message):
         try:
-            message = message.get("o")
-            if message and bool(self.order_pair):
-                if "i" in message and message['i'] == self.order_pair["stop_sell_id"]:
+            if message != None:
+                message = message.get("o")
+                logger.debug(
+                    f"Message:{message}")
+                if message and self.config['position_running'] and "i" in message and message['i'] == self.order_pair["stop_sell_id"]:
                     if message['X'] == "FILLED":
                         cancel_order(
                             self, self.order_pair["limit_sell_order_id"])
                         self.order_pair = {}
                         self.config['position_running'] = False
-                        return
-                if "i" in message and message['i'] == self.order_pair["limit_sell_order_id"]:
+                elif message and self.config['position_running'] and "i" in message and message['i'] == self.order_pair["limit_sell_order_id"]:
                     if message['X'] == "FILLED":
                         cancel_order(self, self.order_pair["stop_sell_id"])
                         self.order_pair = {}
                         self.config['position_running'] = False
-                        return
-        except Error as e:
-            logger.error(e, "Error during stream account trades")
+
+        except ClientError:
+            logger.error(ClientError, "Error during stream account trades")
+
+        except ServerError:
+            logger.error(ServerError, "error during stream trades,server side")
 
     def get_first_candels(self):
         first_candels = self.clientFutures.klines(
@@ -157,23 +162,3 @@ class Bot:
         df[f"SMA_{window}"] = df["Close"].rolling(window=int(window)).mean()
         last_sma = df.iloc[-1][f"SMA_{window}"]
         return float(last_sma)
-
-    def if_filled_cancel_other(self, limit_sell_id, stop_sell_id):
-        sell_limit_order = query_order(self, limit_sell_id)
-        sell_stop_market_order = query_order(self, stop_sell_id)
-        if sell_limit_order["status"] == "FILLED":
-            cancel_order(self, stop_sell_id)
-            self.config["position_running"] = False
-            self.order_pair = {}
-
-        if sell_stop_market_order["status"] == "FILLED":
-            cancel_order(self, limit_sell_id)
-            self.config["position_running"] = False
-            self.order_pair = {}
-
-
-# market_buy(0.002, bot.clientFutures)
-# bot.run()
-# market_buy(0.0029226093055880293, bot.clientFutures)
-# stop_market(0.001, 28200.000, bot.clientFutures)
-# limitSell(0.003, 29100.2, bot.clientFutures)
