@@ -10,16 +10,14 @@ secret_key = os.getenv("SECRET_KEY")
 
 
 bot = Bot(api_key=api_key, secret_key=secret_key,
-          balance=40, timeframe="1m", sma=10)
+          balance=40, timeframe="1m", sma=2)
 
 
 if __name__ == '__main__':
     try:
         bot.run_bullish_engulfing()
-        bot.stream_account_trades()
-        logger.info("Bot and stream orders running")
+        logger.info("Bot running")
 
     except Error:
         bot.run_bullish_engulfing()
-        bot.stream_account_trades()
         logger.error("CRITICAL ERROR:", Error)

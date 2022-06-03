@@ -18,6 +18,8 @@ class Bot:
         self.order_pair = {}
         self.closed_candels = []
         self.sma = sma
+        self.my_client = UMFuturesWebsocketClient()
+        self.my_client.start()
 
     def bullish_engulfing_handler(self, message):
         try:
@@ -57,6 +59,7 @@ class Bot:
                         )
                         limit_sell(limit_sell_price, ammount_to_buy, self)
                         self.config["position_running"] = True
+                        self.stream_account_trades()
                     logger.info(kline)
                     logger.info(self.config['position_running'])
         except Exception as e:
@@ -64,10 +67,8 @@ class Bot:
 
     def run_bullish_engulfing(self):
         try:
-            my_client = UMFuturesWebsocketClient()
             self.get_first_candels()
-            my_client.start()
-            my_client.continuous_kline(
+            self.my_client.continuous_kline(
                 pair="btcusdt",
                 id=1,
                 contractType="perpetual",
@@ -79,35 +80,37 @@ class Bot:
 
     def stream_account_trades(self):
         try:
-            client = self.clientFutures
-            response = client.new_listen_key()
-            ws_client = UMFuturesWebsocketClient()
-            ws_client.start()
-            ws_client.user_data(
-                listen_key=response["listenKey"],
+            self.listen_key = self.clientFutures.new_listen_key()
+            self.my_client.user_data(
+                listen_key=self.listen_key["listenKey"],
                 id=1,
                 callback=self.account_message_handler,
             )
+
         except Error as e:
             logger.error(e, "Error during stream account trades")
 
     def account_message_handler(self, message):
         try:
             if message != None:
-                message = message.get("o")
-                logger.debug(
-                    f"Message:{message}")
-                if message and self.config['position_running'] and "i" in message and message['i'] == self.order_pair["stop_sell_id"]:
-                    if message['X'] == "FILLED":
+                order = message.get("o")
+                if order and self.config['position_running'] and "i" in order and order['i'] == self.order_pair["stop_sell_id"]:
+                    if order['X'] == "FILLED":
                         cancel_order(
                             self, self.order_pair["limit_sell_order_id"])
                         self.order_pair = {}
                         self.config['position_running'] = False
-                elif message and self.config['position_running'] and "i" in message and message['i'] == self.order_pair["limit_sell_order_id"]:
-                    if message['X'] == "FILLED":
+
+                elif order and self.config['position_running'] and "i" in order and order['i'] == self.order_pair["limit_sell_order_id"]:
+                    if order['X'] == "FILLED":
                         cancel_order(self, self.order_pair["stop_sell_id"])
                         self.order_pair = {}
                         self.config['position_running'] = False
+
+                if message.get("e") == 'listenKeyExpired':
+                    logger.debug("renewing listen key!")
+                    #self.listen_key = self.clientFutures.new_listen_key()
+                    self.stream_account_trades()
 
         except ClientError:
             logger.error(ClientError, "Error during stream account trades")
