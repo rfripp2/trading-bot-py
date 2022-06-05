@@ -1,16 +1,14 @@
-from msilib.schema import Error
 from Classes import Bot
 from dotenv import load_dotenv
 import os
-from binance_orders import *
 from logger import logger
+from binance.error import ClientError, ServerError
 load_dotenv()
 api_key = os.getenv("API_KEY")
 secret_key = os.getenv("SECRET_KEY")
 
 
-bot = Bot(api_key=api_key, secret_key=secret_key,
-          balance=40, timeframe="1m", sma=2)
+bot = Bot(api_key=api_key, secret_key=secret_key, timeframe="1m", ema=50)
 
 
 if __name__ == '__main__':
@@ -18,6 +16,6 @@ if __name__ == '__main__':
         bot.run_bullish_engulfing()
         logger.info("Bot running")
 
-    except Error:
+    except ClientError:
         bot.run_bullish_engulfing()
-        logger.error("CRITICAL ERROR:", Error)
+        logger.error("CRITICAL ERROR:", ClientError)

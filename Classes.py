@@ -1,17 +1,14 @@
-from msilib.schema import Error
-from xmlrpc.client import Server
-import pandas as pd
-import numpy as np
 from binance.websocket.um_futures.websocket_client import UMFuturesWebsocketClient
 from binance.um_futures import UMFutures
 from binance_orders import *
 from logger import logger
 from binance.error import ClientError, ServerError
+from indicators import *
 
 
 class Bot:
-    def __init__(self, api_key, secret_key, balance, timeframe, sma):
-        self.balance = balance
+    def __init__(self, api_key, secret_key, timeframe, sma=2, ema=2):
+
         self.config = {"position_running": False}
         self.clientFutures = UMFutures(api_key, secret_key)
         self.timeframe = timeframe
@@ -19,7 +16,14 @@ class Bot:
         self.closed_candels = []
         self.sma = sma
         self.my_client = UMFuturesWebsocketClient()
-        self.my_client.start()
+        self.balance = self.get_balance("USDT")
+        self.ema = ema
+
+    def get_balance(self, coin):
+        assets = self.clientFutures.balance()
+        for asset in assets:
+            if asset['asset'] == coin:
+                return float(asset['balance'])
 
     def bullish_engulfing_handler(self, message):
         try:
@@ -39,7 +43,7 @@ class Bot:
                             penultimate_candle["o"])
                         and penultimate_candle["color"] == "red"
                         and self.config["position_running"] == False
-                        # and float(last_candle["c"]) > float(self.get_sma(self.sma))
+                        and float(last_candle["c"]) > float(get_ema(self, self.ema))
                     ):
                         print("its bullish!")
                         ammount_to_buy = round(
@@ -47,16 +51,14 @@ class Bot:
                         market_buy(ammount_to_buy, self)
                         sell_stop_market_price = round(
                             float(kline["l"]) -
-                            35, 2
+                            atr(self.clientFutures, self.timeframe), 2
                         )
                         stop_market(sell_stop_market_price,
                                     ammount_to_buy, self)
 
                         limit_sell_price = round(
-                            float(kline["c"]) -
-                            sell_stop_market_price + float(kline["c"]),
-                            1,
-                        )
+                            (float(kline["c"]) -
+                             sell_stop_market_price) * 1.25 + float(kline["c"]), 1)
                         limit_sell(limit_sell_price, ammount_to_buy, self)
                         self.config["position_running"] = True
                         self.stream_account_trades()
@@ -68,6 +70,7 @@ class Bot:
     def run_bullish_engulfing(self):
         try:
             self.get_first_candels()
+            self.my_client.start()
             self.my_client.continuous_kline(
                 pair="btcusdt",
                 id=1,
@@ -75,7 +78,7 @@ class Bot:
                 interval=self.timeframe,
                 callback=self.bullish_engulfing_handler,
             )
-        except Error as e:
+        except ClientError as e:
             logger.error(e, "Error during bullisn engulfing run")
 
     def stream_account_trades(self):
@@ -87,7 +90,7 @@ class Bot:
                 callback=self.account_message_handler,
             )
 
-        except Error as e:
+        except ClientError as e:
             logger.error(e, "Error during stream account trades")
 
     def account_message_handler(self, message):
@@ -139,29 +142,3 @@ class Bot:
                     "color": "red",
                 }
             )
-
-    def get_sma(self, window):
-        candles = self.clientFutures.klines(
-            "BTCUSDT", self.timeframe, limit=window, contractType="perpetual"
-        )
-        pandas_array = np.array(candles)
-        df = pd.DataFrame(
-            pandas_array,
-            columns=[
-                "Open Time",
-                "Open",
-                "High",
-                "Low",
-                "Close",
-                "Volume",
-                "Close time",
-                "Quote asset volume",
-                "Number of trades",
-                "Taker buy base asset volume",
-                "Taker buy quote asset volume",
-                "Ignore",
-            ],
-        )
-        df[f"SMA_{window}"] = df["Close"].rolling(window=int(window)).mean()
-        last_sma = df.iloc[-1][f"SMA_{window}"]
-        return float(last_sma)

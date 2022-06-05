@@ -1,7 +1,5 @@
 from binance.error import ClientError
-import pandas as pd
 from logger import logger
-#import talib
 
 
 def market_buy(quantity, bot):
@@ -102,11 +100,3 @@ def query_order(bot, id):
                 error.status_code, error.error_code, error.error_message
             )
         )
-
-
-def atr(client, timeframe):
-    candles = client.klines("BTCUSDT", timeframe,
-                            limit=15, contractType="perpetual")
-    df = pd.DataFrame(candles)
-    df["atr"] = talib.ATR(df[2], df[3], df[4], timeperiod=14)
-    return float(df.iloc[-1]["atr"])
