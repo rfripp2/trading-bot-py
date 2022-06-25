@@ -92,19 +92,21 @@ class Bot:
 
         except ClientError as e:
             logger.error(e, "Error during stream account trades")
+            self.stream_account_trades()
 
     def account_message_handler(self, message):
         try:
             if message != None:
+                logger.debug("Message from stream account:", message)
                 order = message.get("o")
-                if order and self.config['position_running'] and "i" in order and order['i'] == self.order_pair["stop_sell_id"]:
+                if order and self.config['position_running'] and order['i'] == self.order_pair["stop_sell_id"]:
                     if order['X'] == "FILLED":
                         cancel_order(
                             self, self.order_pair["limit_sell_order_id"])
                         self.order_pair = {}
                         self.config['position_running'] = False
 
-                elif order and self.config['position_running'] and "i" in order and order['i'] == self.order_pair["limit_sell_order_id"]:
+                elif order and self.config['position_running'] and order['i'] == self.order_pair["limit_sell_order_id"]:
                     if order['X'] == "FILLED":
                         cancel_order(self, self.order_pair["stop_sell_id"])
                         self.order_pair = {}
@@ -112,14 +114,15 @@ class Bot:
 
                 if message.get("e") == 'listenKeyExpired':
                     logger.debug("renewing listen key!")
-                    #self.listen_key = self.clientFutures.new_listen_key()
                     self.stream_account_trades()
 
         except ClientError:
             logger.error(ClientError, "Error during stream account trades")
+            self.stream_account_trades()
 
         except ServerError:
             logger.error(ServerError, "error during stream trades,server side")
+            self.stream_account_trades()
 
     def get_first_candels(self):
         first_candels = self.clientFutures.klines(
